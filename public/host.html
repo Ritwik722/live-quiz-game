@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Host Dashboard</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #2c3e50; color: white; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: #34495e; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        h1, h2 { text-align: center; }
+        input, select { width: 100%; padding: 8px; margin: 4px 0 12px 0; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        .quiz-list-item { display: flex; justify-content: space-between; align-items: center; background: #2c3e50; padding: 10px 15px; border-radius: 5px; margin-bottom: 10px; }
+        .start-game-btn { background: #2ecc71; }
+        .start-game-btn:hover { background: #27ae60; }
+        .save-quiz-btn { background: #2ecc71; width: 100%; padding: 15px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Host Dashboard</h1>
+        <h2>My Quizzes</h2>
+        <div id="quizList">
+            <p>Loading quizzes...</p>
+        </div>
+    </div>
+
+    <div class="container" id="createQuizView">
+        </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const quizListContainer = document.getElementById('quizList');
+        
+        // When the page loads, ask the server for the list of quizzes
+        socket.on('connect', () => {
+            socket.emit('host:get_quizzes');
+        });
+
+        // Listen for the server's response and display the quizzes
+        socket.on('quizzes_list', (quizzes) => {
+            quizListContainer.innerHTML = ''; // Clear "Loading..." message
+            if (quizzes.length === 0) {
+                quizListContainer.innerHTML = '<p>You have not created any quizzes yet.</p>';
+                return;
+            }
+
+            quizzes.forEach(quiz => {
+                const quizItem = document.createElement('div');
+                quizItem.className = 'quiz-list-item';
+                quizItem.innerHTML = `
+                    <span>${quiz.title}</span>
+                    <button class="start-game-btn" data-quiz-id="${quiz.id}">Start Game</button>
+                `;
+                quizListContainer.appendChild(quizItem);
+            });
+        });
+
+        // Use event delegation to handle clicks on any "Start Game" button
+        quizListContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('start-game-btn')) {
+                const quizId = event.target.getAttribute('data-quiz-id');
+                socket.emit('host:create_game', { quizId });
+            }
+        });
+
+        // When the server confirms the game is created, redirect to the lobby
+        socket.on('game_created', (data) => {
+            // Redirect the host to the main player page, passing the game code in the URL
+            window.location.href = `/?gameCode=${data.gameCode}`;
+        });
+
+        // The JavaScript for the quiz creation form remains the same
+    </script>
+</body>
+</html>
