@@ -64,6 +64,8 @@
             question: document.getElementById('questionView'),
             results: document.getElementById('resultsView')
         };
+        const correctSound = new Audio('correct.mp3'); // You'll need to find and add sound files
+        const wrongSound = new Audio('wrong.mp3');
         const nameInput = document.getElementById('nameInput');
         const codeInput = document.getElementById('codeInput');
         const joinGameBtn = document.getElementById('joinGameBtn');
