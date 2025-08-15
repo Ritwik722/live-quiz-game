@@ -5,13 +5,15 @@
     <title>Host Dashboard</title>
     <style>
         body { font-family: system-ui, sans-serif; background: #2c3e50; color: white; padding: 20px; }
-        .container { max-width: 800px; margin: auto; background: #34495e; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .container { max-width: 800px; margin: auto; background: #34495e; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         h1, h2 { text-align: center; }
-        input, select { width: 100%; padding: 8px; margin: 4px 0 12px 0; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        input, select { width: 100%; padding: 8px; margin: 4px 0 12px 0; border-radius: 4px; border: 1px solid #95a5a6; box-sizing: border-box; background: #3b5168; color: white; }
+        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #2980b9; }
         .quiz-list-item { display: flex; justify-content: space-between; align-items: center; background: #2c3e50; padding: 10px 15px; border-radius: 5px; margin-bottom: 10px; }
         .start-game-btn { background: #2ecc71; }
         .start-game-btn:hover { background: #27ae60; }
+        .question-block { background: #2c3e50; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
         .save-quiz-btn { background: #2ecc71; width: 100%; padding: 15px; font-size: 18px; }
     </style>
 </head>
@@ -25,38 +27,41 @@
     </div>
 
     <div class="container" id="createQuizView">
-        </div>
+        <h2>Create a New Quiz</h2>
+        <input type="text" id="quizTitle" placeholder="Quiz Title">
+        <div id="questionsContainer"></div>
+        <button id="addQuestionBtn">Add Another Question</button>
+        <hr style="margin: 20px 0; border-color: #2c3e50;">
+        <button id="saveQuizBtn" class="save-quiz-btn">Save Quiz</button>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         const quizListContainer = document.getElementById('quizList');
-        
-        // When the page loads, ask the server for the list of quizzes
-        socket.on('connect', () => {
-            socket.emit('host:get_quizzes');
-        });
+        const quizTitleInput = document.getElementById('quizTitle');
+        const questionsContainer = document.getElementById('questionsContainer');
+        const addQuestionBtn = document.getElementById('addQuestionBtn');
+        const saveQuizBtn = document.getElementById('saveQuizBtn');
+        let questionCount = 0;
 
-        // Listen for the server's response and display the quizzes
+        // === RENDER QUIZ LIST ===
+        socket.on('connect', () => socket.emit('host:get_quizzes'));
         socket.on('quizzes_list', (quizzes) => {
-            quizListContainer.innerHTML = ''; // Clear "Loading..." message
+            quizListContainer.innerHTML = '';
             if (quizzes.length === 0) {
                 quizListContainer.innerHTML = '<p>You have not created any quizzes yet.</p>';
                 return;
             }
-
             quizzes.forEach(quiz => {
                 const quizItem = document.createElement('div');
                 quizItem.className = 'quiz-list-item';
-                quizItem.innerHTML = `
-                    <span>${quiz.title}</span>
-                    <button class="start-game-btn" data-quiz-id="${quiz.id}">Start Game</button>
-                `;
+                quizItem.innerHTML = `<span>${quiz.title}</span><button class="start-game-btn" data-quiz-id="${quiz.id}">Start Game</button>`;
                 quizListContainer.appendChild(quizItem);
             });
         });
 
-        // Use event delegation to handle clicks on any "Start Game" button
+        // === START GAME LOGIC ===
         quizListContainer.addEventListener('click', (event) => {
             if (event.target.classList.contains('start-game-btn')) {
                 const quizId = event.target.getAttribute('data-quiz-id');
@@ -64,13 +69,65 @@
             }
         });
 
-        // When the server confirms the game is created, redirect to the lobby
         socket.on('game_created', (data) => {
-            // Redirect the host to the main player page, passing the game code in the URL
-            window.location.href = `/?gameCode=${data.gameCode}`;
+            window.location.href = `/?gameCode=${data.gameCode}&isHost=true`;
         });
 
-        // The JavaScript for the quiz creation form remains the same
+        // === QUIZ CREATION FORM LOGIC ===
+        function addQuestion() {
+            questionCount++;
+            const qId = `q${questionCount}`;
+            const questionBlock = document.createElement('div');
+            questionBlock.className = 'question-block';
+            questionBlock.innerHTML = `
+                <h4>Question ${questionCount}</h4>
+                <input type="text" id="${qId}_text" placeholder="Question Text">
+                <input type="text" id="${qId}_opt1" placeholder="Option 1">
+                <input type="text" id="${qId}_opt2" placeholder="Option 2">
+                <input type="text" id="${qId}_opt3" placeholder="Option 3">
+                <input type="text" id="${qId}_opt4" placeholder="Option 4">
+                <label>Correct Answer:</label>
+                <select id="${qId}_correct">
+                    <option value="0">Option 1</option><option value="1">Option 2</option><option value="2">Option 3</option><option value="3">Option 4</option>
+                </select>
+            `;
+            questionsContainer.appendChild(questionBlock);
+        }
+        addQuestionBtn.addEventListener('click', addQuestion);
+        addQuestion(); // Add first question on load
+
+        saveQuizBtn.addEventListener('click', () => {
+            const quizData = {
+                title: quizTitleInput.value.trim(),
+                questions: []
+            };
+            for (let i = 1; i <= questionCount; i++) {
+                const qId = `q${i}`;
+                const text = document.getElementById(`${qId}_text`).value.trim();
+                const options = [
+                    document.getElementById(`${qId}_opt1`).value.trim(), document.getElementById(`${qId}_opt2`).value.trim(),
+                    document.getElementById(`${qId}_opt3`).value.trim(), document.getElementById(`${qId}_opt4`).value.trim(),
+                ];
+                const correctIndex = document.getElementById(`${qId}_correct`).value;
+                if (text && options.every(opt => opt)) {
+                    quizData.questions.push({
+                        question: text, options: options, correctAnswer: options[correctIndex]
+                    });
+                }
+            }
+            if (!quizData.title || quizData.questions.length === 0) return alert('Please provide a title and at least one complete question.');
+            socket.emit('host:create_quiz', quizData);
+        });
+
+        socket.on('quiz_saved', (data) => {
+            alert(`Quiz "${data.title}" was saved successfully!`);
+            socket.emit('host:get_quizzes'); // Refresh the list
+            // Clear form
+            quizTitleInput.value = '';
+            questionsContainer.innerHTML = '';
+            questionCount = 0;
+            addQuestion();
+        });
     </script>
 </body>
 </html>
