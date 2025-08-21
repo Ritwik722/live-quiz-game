@@ -23,14 +23,6 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-// --- FIREBASE INITIALIZATION ---
-// Make sure you have your serviceAccountKey.json in the root folder
-const serviceAccount = require('./serviceAccountKey.json');
-serviceAccount = require('./serviceAccountKey.json');
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-
 // --- STATE MANAGEMENT ---
 // This object will hold the live game data in memory
 const games = {};
