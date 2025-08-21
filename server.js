@@ -9,12 +9,27 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // --- FIREBASE INITIALIZATION ---
-// Make sure you have your serviceAccountKey.json in the root folder
-const serviceAccount = require('./serviceAccountKey.json');
+let serviceAccount;
+// Check if we are in a production environment (like Render)
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // If so, parse the credentials from the environment variable
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+    // Otherwise, use the local file for development
+}
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 const db = admin.firestore();
+
+// --- FIREBASE INITIALIZATION ---
+// Make sure you have your serviceAccountKey.json in the root folder
+const serviceAccount = require('./serviceAccountKey.json');
+serviceAccount = require('./serviceAccountKey.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 // --- STATE MANAGEMENT ---
 // This object will hold the live game data in memory
