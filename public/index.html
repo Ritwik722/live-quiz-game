@@ -2,15 +2,16 @@
 <html>
 <head>
     <title>Quiz Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #2c3e50; color: white; text-align: center; }
-        .container { background: #34495e; padding: 40px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); min-width: 400px; }
-        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 5px; transition: background-color 0.2s; }
+        .container { background: #34495e; padding: 40px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); min-width: 400px; max-width: 90%; }
+        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 5px; transition: background-color 0.2s, opacity 0.2s; }
         button:hover { background: #2980b9; }
         button:disabled { background: #95a5a6; cursor: not-allowed; }
         #startGameBtn, #nextQuestionBtn { background: #2ecc71; }
         #startGameBtn:hover, #nextQuestionBtn:hover { background: #27ae60; }
-        input { padding: 10px; border-radius: 5px; border: 1px solid #95a5a6; background: #3b5168; color: white; margin: 5px; }
+        input { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 5px; border: 1px solid #95a5a6; background: #3b5168; color: white; margin: 5px 0; }
         h1, h2, h3 { margin-top: 0; }
         #gameCodeDisplay { color: #f1c40f; font-weight: bold; }
         #playerList, #leaderboard { list-style-type: none; padding: 0; }
@@ -18,9 +19,10 @@
         .hidden { display: none; }
         .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;}
         .options-grid button { padding: 20px; font-size: 18px; height: 80px; }
-        .correct { background-color: #2ecc71 !important; }
-        .incorrect { background-color: #e74c3c !important; }
         #timer { font-size: 24px; font-weight: bold; color: white; background: #e67e22; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px auto; border: 3px solid white; }
+        .options-grid button.correct { background-color: #2ecc71 !important; color: white; }
+        .options-grid button.incorrect { background-color: #e74c3c !important; color: white; }
+        .options-grid button.answered { opacity: 0.7; }
     </style>
 </head>
 <body>
@@ -56,16 +58,12 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-
-        // DOM Elements
         const views = {
             initial: document.getElementById('initialView'),
             lobby: document.getElementById('gameLobby'),
             question: document.getElementById('questionView'),
             results: document.getElementById('resultsView')
         };
-        const correctSound = new Audio('correct.mp3'); // You'll need to find and add sound files
-        const wrongSound = new Audio('wrong.mp3');
         const nameInput = document.getElementById('nameInput');
         const codeInput = document.getElementById('codeInput');
         const joinGameBtn = document.getElementById('joinGameBtn');
@@ -78,41 +76,31 @@
         const resultText = document.getElementById('resultText');
         const leaderboard = document.getElementById('leaderboard');
         const nextQuestionBtn = document.getElementById('nextQuestionBtn');
-
-        // Client State
         let myGameCode = '';
         let isHost = false;
+        let myAnswer = '';
 
-        // --- CORE LOGIC ---
         function showView(viewName) {
             Object.values(views).forEach(v => v.classList.add('hidden'));
             views[viewName].classList.remove('hidden');
         }
 
-    // 1. On page load, determine if user is a host or player
-    window.addEventListener('load', () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        myGameCode = urlParams.get('gameCode');
-        isHost = urlParams.get('isHost') === 'true';
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            myGameCode = urlParams.get('gameCode');
+            isHost = urlParams.get('isHost') === 'true';
 
-        if (myGameCode && isHost) {
-            // This is a host. Show the lobby and tell the server we've arrived.
-            showView('lobby');
-            gameCodeDisplay.textContent = myGameCode;
-            startGameBtn.classList.remove('hidden');
-            playerList.innerHTML = '<li>Waiting for players...</li>';
-            
-            // --- THIS IS THE KEY FIX ---
-            // Re-claim ownership of the game with our new socket ID.
-            socket.emit('host:rejoin', { gameCode: myGameCode });
-
-        } else {
-            // This is a player. Show the initial join screen.
-            showView('initial');
-        }
-    });
+            if (myGameCode && isHost) {
+                showView('lobby');
+                gameCodeDisplay.textContent = myGameCode;
+                startGameBtn.classList.remove('hidden');
+                playerList.innerHTML = '<li>Waiting for players...</li>';
+                socket.emit('host:rejoin', { gameCode: myGameCode });
+            } else {
+                showView('initial');
+            }
+        });
         
-        // 2. Player joins a game
         joinGameBtn.addEventListener('click', () => {
             const playerName = nameInput.value.trim();
             const gameCode = codeInput.value.trim();
@@ -122,45 +110,30 @@
             socket.emit('player:join_game', { gameCode, playerName });
         });
 
-     // 3. Listen for player list updates (works for host and players)
-    socket.on('player_joined', (data) => {
-        // Only update the view if we are currently in the lobby
-        if (views.lobby.classList.contains('hidden')) return;
+        startGameBtn.addEventListener('click', () => {
+            if (isHost) socket.emit('host:start_game', { gameCode: myGameCode });
+        });
 
-        showView('lobby');
-        gameCodeDisplay.textContent = myGameCode;
-        if (isHost) {
-            startGameBtn.classList.remove('hidden');
-        } else {
-            startGameBtn.classList.add('hidden');
-        }
-
-        // Update the player list UI
-        if (data.players.length > 0) {
-            playerList.innerHTML = '';
-            data.players.forEach(p => { playerList.innerHTML += `<li>${p.name}</li>`; });
-        } else {
-            playerList.innerHTML = '<li>Waiting for players...</li>';
-        }
-    });
-
-        // 4. Host moves to the next question
         nextQuestionBtn.addEventListener('click', () => {
             if (isHost) socket.emit('host:next_question', { gameCode: myGameCode });
         });
 
-        // --- SOCKET EVENT LISTENERS ---
         socket.on('player_joined', (data) => {
             showView('lobby');
             gameCodeDisplay.textContent = myGameCode;
             if (isHost) startGameBtn.classList.remove('hidden');
             
-            playerList.innerHTML = '';
-            data.players.forEach(p => { playerList.innerHTML += `<li>${p.name}</li>`; });
+            if (data.players.length > 0) {
+                playerList.innerHTML = '';
+                data.players.forEach(p => { playerList.innerHTML += `<li>${p.name}</li>`; });
+            } else {
+                playerList.innerHTML = '<li>Waiting for players...</li>';
+            }
         });
 
         socket.on('question_started', (data) => {
             showView('question');
+            myAnswer = '';
             nextQuestionBtn.classList.add('hidden');
             questionText.textContent = data.question;
             optionsContainer.innerHTML = '';
@@ -168,17 +141,16 @@
                 const button = document.createElement('button');
                 button.textContent = option;
                 button.onclick = () => {
-                    optionsContainer.querySelectorAll('button').forEach(btn => btn.disabled = true);
+                    myAnswer = option;
+                    optionsContainer.querySelectorAll('button').forEach(btn => {
+                        btn.disabled = true;
+                        btn.classList.add('answered');
+                    });
                     socket.emit('player:submit_answer', { gameCode: myGameCode, answer: option });
                 };
                 optionsContainer.appendChild(button);
             });
         });
-
-    // Example:
-    startGameBtn.addEventListener('click', () => {
-        if (isHost) socket.emit('host:start_game', { gameCode: myGameCode });
-    });
 
         socket.on('time_update', (data) => {
             timerDisplay.textContent = data.timeLeft;
@@ -187,6 +159,17 @@
         socket.on('show_results', (data) => {
             showView('results');
             resultText.textContent = `The correct answer was: ${data.correctAnswer}`;
+            
+            const buttons = optionsContainer.querySelectorAll('button');
+            buttons.forEach(button => {
+                const answerText = button.textContent;
+                if (answerText === data.correctAnswer) {
+                    button.classList.add('correct');
+                } else if (answerText === myAnswer) {
+                    button.classList.add('incorrect');
+                }
+            });
+
             leaderboard.innerHTML = '';
             data.players.forEach(p => {
                 leaderboard.innerHTML += `<li><span>${p.name}</span> <span>${p.score} pts</span></li>`;
@@ -194,21 +177,19 @@
             if (isHost) nextQuestionBtn.classList.remove('hidden');
         });
 
-socket.on('game_over', (data) => {
-    showView('results');
-    nextQuestionBtn.classList.add('hidden');
-    resultText.textContent = "🏁 Game Over! Final Scores:";
-    
-    leaderboard.innerHTML = '';
-    data.players.forEach(p => {
-        // THE FIX IS ON THE NEXT LINE
-        leaderboard.innerHTML += `<li><span>${p.name}</span> <span>${p.score} pts</span></li>`;
-    });
-});
+        socket.on('game_over', (data) => {
+            showView('results');
+            nextQuestionBtn.classList.add('hidden');
+            resultText.textContent = "🏁 Game Over! Final Scores:";
+            leaderboard.innerHTML = '';
+            data.players.forEach(p => {
+                leaderboard.innerHTML += `<li><span>${p.name}</span> <span>${p.score} pts</span></li>`;
+            });
+        });
 
         socket.on('error', (data) => {
             alert(data.message);
-            window.location.href = '/'; // Redirect on error
+            window.location.href = '/';
         });
     </script>
 </body>
